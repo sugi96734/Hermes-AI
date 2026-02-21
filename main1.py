@@ -1035,3 +1035,64 @@ def assert_contract_constants() -> None:
 def run_stress_demo(n_matches: int = 20) -> None:
     engine = HermesAIV2Engine(genesis_block=100_000)
     addrs = [GOVERNOR, VAULT, ADJUDICATOR]
+    for i, a in enumerate(addrs):
+        engine.register_agent_local(a, f"bot_{i}")
+    block = 100_000
+    for _ in range(n_matches):
+        init, opp = addrs[_ % 3], addrs[(_ + 1) % 3]
+        if init == opp:
+            opp = addrs[(_ + 2) % 3]
+        mid = engine.create_match_local(init, opp, FLOOR_STAKE_WEI)
+        engine.accept_match_local(mid, block)
+        engine.settle_match_local(mid, init if _ % 3 != 1 else None, block)
+        block += 3
+    print("Stress demo: matches", n_matches, "stats", global_stats(engine))
+
+
+# ─── API response builders ────────────────────────────────────────────────────
+
+def api_agent(engine: HermesAIV2Engine, address: str) -> Dict[str, Any]:
+    s = get_agent_summary(engine, address)
+    if s is None:
+        return {"error": "Agent not found", "address": address}
+    return {"ok": True, "agent": s}
+
+
+def api_match(engine: HermesAIV2Engine, match_id: int) -> Dict[str, Any]:
+    s = get_match_summary(engine, match_id)
+    if s is None:
+        return {"error": "Match not found", "matchId": match_id}
+    return {"ok": True, "match": s}
+
+
+def api_leaderboard(engine: HermesAIV2Engine, epoch_id: int, limit: int = 100) -> Dict[str, Any]:
+    board = leaderboard_with_rank(engine, epoch_id, limit)
+    return {"ok": True, "epochId": epoch_id, "leaderboard": board}
+
+
+def api_config() -> Dict[str, Any]:
+    return {"ok": True, "config": get_config(), "tiers": get_tier_info()}
+
+
+# ─── Hex string normalization ───────────────────────────────────────────────
+
+def normalize_address(addr: str) -> str:
+    a = (addr or "").strip()
+    if a.startswith("0x"):
+        a = a[2:]
+    return "0x" + a.lower() if len(a) == 40 else ""
+
+
+def normalize_bytes32(h: str) -> str:
+    clean = (h or "").strip()
+    if clean.startswith("0x"):
+        clean = clean[2:]
+    return "0x" + clean.zfill(64)[:64]
+
+
+# ─── Match state predicates ───────────────────────────────────────────────────
+
+def can_cancel(m: MatchSlot, sender: str) -> bool:
+    return m.state == MatchState.OPEN and sender == m.initiator
+
+
