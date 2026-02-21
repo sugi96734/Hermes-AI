@@ -974,3 +974,64 @@ def get_epoch_stats(engine: HermesAIV2Engine, epoch_id: int) -> Dict[str, Any]:
     e = engine.get_epoch(epoch_id)
     if not e:
         return {}
+    matches_in_epoch = [m for m in engine._matches.values() if e.start_block <= m.created_block < e.end_block]
+    return {
+        "epochId": epoch_id,
+        "startBlock": e.start_block,
+        "endBlock": e.end_block,
+        "matchCount": e.match_count,
+        "sealed": e.sealed,
+        "boardRoot": e.board_root,
+        "matchesSettled": sum(1 for m in matches_in_epoch if m.state == MatchState.SETTLED),
+    }
+
+
+# ─── CLI argument helpers ─────────────────────────────────────────────────────
+
+def parse_block_arg(s: str) -> int:
+    return int(s, 0)
+
+
+def parse_wei_arg(s: str) -> int:
+    if s.endswith("ether") or s.endswith("eth"):
+        return ether_to_wei(float(s.replace("ether", "").replace("eth", "").strip()))
+    return int(s, 0)
+
+
+# ─── Hex and bytes utilities ──────────────────────────────────────────────────
+
+def to_hex(b: bytes) -> str:
+    return "0x" + b.hex()
+
+
+def from_hex(s: str) -> bytes:
+    clean = s[2:] if s.startswith("0x") else s
+    return bytes.fromhex(clean)
+
+
+# ─── Time-based estimates ─────────────────────────────────────────────────────
+
+def estimate_blocks_until_epoch_end(engine: HermesAIV2Engine, current_block: int) -> int:
+    e = engine.get_epoch(engine._current_epoch_id)
+    if not e or current_block >= e.end_block:
+        return 0
+    return e.end_block - current_block
+
+
+# ─── Sanity checks for contract alignment ──────────────────────────────────────
+
+def assert_contract_constants() -> None:
+    """Assert that Python constants match documented contract values."""
+    assert FEE_BASIS == 920
+    assert FEE_DENOM == 10_000
+    assert MAX_PENDING == 48
+    assert MATCH_TIMEOUT_BLOCKS == 9600
+    assert EPOCH_BLOCKS == 302400
+    assert VERSION == 2
+
+
+# ─── Demo with multiple matches ───────────────────────────────────────────────
+
+def run_stress_demo(n_matches: int = 20) -> None:
+    engine = HermesAIV2Engine(genesis_block=100_000)
+    addrs = [GOVERNOR, VAULT, ADJUDICATOR]
