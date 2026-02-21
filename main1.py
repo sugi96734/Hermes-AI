@@ -913,3 +913,64 @@ def engine_state_to_json(engine: HermesAIV2Engine) -> str:
     return json.dumps(data, indent=2)
 
 
+# ─── Entry points for external tools ───────────────────────────────────────────
+
+def get_all_selectors() -> Dict[str, str]:
+    return dict(SELECTORS)
+
+
+def get_tier_info() -> List[Dict[str, Any]]:
+    return [
+        {"tier": i, "name": tier_name(i), "minPoints": min_points_for_tier(i)}
+        for i in range(len(TIER_NAMES))
+    ]
+
+
+# ─── Batch agent summaries ───────────────────────────────────────────────────
+
+def get_agent_summaries_batch(engine: HermesAIV2Engine, addresses: List[str]) -> List[Optional[Dict[str, Any]]]:
+    return [get_agent_summary(engine, addr) for addr in addresses]
+
+
+def get_match_summaries_batch(engine: HermesAIV2Engine, match_ids: List[int]) -> List[Optional[Dict[str, Any]]]:
+    return [get_match_summary(engine, mid) for mid in match_ids]
+
+
+# ─── Caduceus proof verification (off-chain) ──────────────────────────────────
+
+def verify_caduceus_proof(engine: HermesAIV2Engine, match_id: int, nonce: str, chain_id: int, contract: str, expected_hash: str) -> bool:
+    computed = engine.caduceus_proof_hash(match_id, nonce, chain_id, contract)
+    return computed.lower() == expected_hash.lower()
+
+
+# ─── Reward projection ───────────────────────────────────────────────────────
+
+def project_reward_after_win(engine: HermesAIV2Engine, address: str, pool_wei: int) -> int:
+    """Project accrued reward share after winning a match with given pool size."""
+    fee = fee_from_pool(pool_wei)
+    return engine.claimable_reward(address) + accrued_reward_share(fee)
+
+
+# ─── Match history for agent ──────────────────────────────────────────────────
+
+def get_agent_match_history(engine: HermesAIV2Engine, address: str, limit: int = 50) -> List[Dict[str, Any]]:
+    init_ids = engine._matches_by_initiator.get(address, [])
+    opp_ids = engine._matches_by_opponent.get(address, [])
+    all_ids = sorted(set(init_ids) | set(opp_ids), reverse=True)[:limit]
+    return [match_to_dict(engine._matches[mid]) for mid in all_ids if mid in engine._matches]
+
+
+# ─── Epoch board builder (for sealing) ────────────────────────────────────────
+
+def build_epoch_board_root(agent_addresses: List[str]) -> str:
+    """Build a simple root hash of ordered addresses (stand-in for Merkle)."""
+    payload = "".join(a.lower() for a in agent_addresses)
+    return "0x" + hashlib.sha256(payload.encode()).hexdigest()
+
+
+# ─── Stats per epoch ─────────────────────────────────────────────────────────
+
+def get_epoch_stats(engine: HermesAIV2Engine, epoch_id: int) -> Dict[str, Any]:
+    e = engine.get_epoch(epoch_id)
+    if not e:
+        return {}
