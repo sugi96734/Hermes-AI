@@ -303,3 +303,64 @@ def tier_name(tier: int) -> str:
 
 def format_wei(wei: int) -> str:
     s = str(wei)
+    if len(s) <= 18:
+        return "0." + s.zfill(18).rstrip("0") or "0"
+    return str(wei // 10**18) + "." + s[-18:].rstrip("0").ljust(1, "0")
+
+
+def parse_address(addr: str) -> str:
+    if not addr:
+        raise ValueError("Empty address")
+    a = addr.strip()
+    if a.startswith("0x"):
+        a = a[2:]
+    if len(a) != 40 or not all(c in "0123456789abcdefABCDEF" for c in a):
+        raise ValueError("Invalid address")
+    return "0x" + a.lower()
+
+
+# ─── CLI and runner ───────────────────────────────────────────────────────────
+
+def main() -> None:
+    engine = HermesAIV2Engine(genesis_block=21_000_000)
+    print("Hermes-AI V2 Engine")
+    print("Version:", VERSION)
+    print("Governor:", GOVERNOR)
+    print("Namespace:", CADUCEUS_NAMESPACE[:20] + "...")
+
+    engine.register_agent_local(GOVERNOR, "governor_bot")
+    engine.register_agent_local(VAULT, "vault_bot")
+    mid = engine.create_match_local(GOVERNOR, VAULT, FLOOR_STAKE_WEI)
+    print("Created match id:", mid)
+    engine.accept_match_local(mid, engine.genesis_block + 1)
+    engine.settle_match_local(mid, GOVERNOR, engine.genesis_block + 2)
+    print("Governor tier:", engine.tier_for(GOVERNOR))
+    print("Governor claimable:", format_wei(engine.claimable_reward(GOVERNOR)))
+    print("Leaderboard:", engine.build_leaderboard(1))
+    print("Summary:", json.dumps(engine.to_dict(), indent=2))
+
+
+# ─── Batch and pagination ─────────────────────────────────────────────────────
+
+def get_match_ids_for_initiator(engine: HermesAIV2Engine, address: str, offset: int, limit: int) -> List[int]:
+    ids = engine._matches_by_initiator.get(address, [])
+    return ids[offset : offset + limit]
+
+
+def get_match_ids_for_opponent(engine: HermesAIV2Engine, address: str, offset: int, limit: int) -> List[int]:
+    ids = engine._matches_by_opponent.get(address, [])
+    return ids[offset : offset + limit]
+
+
+def get_open_match_ids(engine: HermesAIV2Engine, max_count: int) -> List[int]:
+    out = []
+    for mid, m in engine._matches.items():
+        if m.state == MatchState.OPEN and len(out) < max_count:
+            out.append(mid)
+    return out
+
+
+def get_settled_match_ids(engine: HermesAIV2Engine, offset: int, limit: int) -> List[int]:
+    out = [mid for mid, m in engine._matches.items() if m.state == MatchState.SETTLED]
+    return out[offset : offset + limit]
+
