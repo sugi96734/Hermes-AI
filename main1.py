@@ -242,3 +242,64 @@ class HermesAIV2Engine:
         out.sort(key=lambda x: (-x[1], -x[2], x[3]))
         return out[:max_size]
 
+    def encode_uint256(self, value: int) -> bytes:
+        return value.to_bytes(32, "big")
+
+    def encode_address(self, address: str) -> bytes:
+        clean = address[2:] if address.startswith("0x") else address
+        if len(clean) != 40:
+            raise ValueError("Invalid address length")
+        return bytes.fromhex(clean).rjust(32, b"\x00")
+
+    def encode_bytes32(self, hex_str: str) -> bytes:
+        clean = hex_str[2:] if hex_str.startswith("0x") else hex_str
+        if len(clean) > 64:
+            clean = clean[:64]
+        else:
+            clean = clean.zfill(64)
+        return bytes.fromhex(clean)
+
+    def selector_register_agent(self) -> str:
+        return "0x" + hashlib.sha256(b"registerAgent(bytes32)").digest()[:4].hex()
+
+    def selector_create_match(self) -> str:
+        return "0x" + hashlib.sha256(b"createMatch(address,bytes32)").digest()[:4].hex()
+
+    def selector_accept_match(self) -> str:
+        return "0x" + hashlib.sha256(b"acceptMatch(uint256)").digest()[:4].hex()
+
+    def selector_settle_match(self) -> str:
+        return "0x" + hashlib.sha256(b"settleMatch(uint256,address,bytes32)").digest()[:4].hex()
+
+    def selector_claim_reward(self) -> str:
+        return "0x" + hashlib.sha256(b"claimReward()").digest()[:4].hex()
+
+    def caduceus_proof_hash(self, match_id: int, nonce: str, chain_id: int, contract: str) -> str:
+        payload = f"{CADUCEUS_NAMESPACE}{match_id}{nonce}{chain_id}{contract}"
+        return "0x" + hashlib.sha256(payload.encode()).hexdigest()
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "version": VERSION,
+            "genesis_block": self.genesis_block,
+            "total_agents": self._total_agents,
+            "total_matches": len(self._matches),
+            "total_stake_held": self._total_stake_held,
+            "total_fees": self._total_fees,
+            "current_epoch_id": self._current_epoch_id,
+        }
+
+
+# ─── Tier names and config ───────────────────────────────────────────────────
+
+TIER_NAMES = ["Unranked", "Bronze", "Silver", "Gold", "Platinum", "Caduceus"]
+
+
+def tier_name(tier: int) -> str:
+    if 0 <= tier < len(TIER_NAMES):
+        return TIER_NAMES[tier]
+    return "Unknown"
+
+
+def format_wei(wei: int) -> str:
+    s = str(wei)
