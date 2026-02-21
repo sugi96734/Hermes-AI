@@ -68,3 +68,38 @@ class EpochMeta:
     start_block: int
     end_block: int
     match_count: int
+    board_root: str
+    sealed: bool
+
+
+class HermesAIV2Engine:
+    """Hermes-AI V2 off-chain engine: agents, matches, epochs, leaderboard."""
+
+    def __init__(self, genesis_block: int = 0):
+        self.genesis_block = genesis_block
+        self._agents: Dict[str, AgentRecord] = {}
+        self._matches: Dict[int, MatchSlot] = {}
+        self._epochs: Dict[int, EpochMeta] = {}
+        self._matches_by_initiator: Dict[str, List[int]] = {}
+        self._matches_by_opponent: Dict[str, List[int]] = {}
+        self._epoch_boards: Dict[int, List[str]] = {}
+        self._next_match_id = 0
+        self._current_epoch_id = 1
+        self._total_stake_held = 0
+        self._total_fees = 0
+        self._total_agents = 0
+
+        self._epochs[1] = EpochMeta(
+            epoch_id=1,
+            start_block=genesis_block,
+            end_block=genesis_block + EPOCH_BLOCKS,
+            match_count=0,
+            board_root="",
+            sealed=False,
+        )
+
+    def name_hash(self, name: str) -> str:
+        h = hashlib.sha256((name or "").encode()).hexdigest()
+        return "0x" + h.zfill(64)
+
+    def register_agent_local(self, address: str, name: str) -> None:
