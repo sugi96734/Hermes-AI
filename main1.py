@@ -486,3 +486,64 @@ MATCH_STATE_LABELS = {
 
 
 def match_state_label(state: MatchState) -> str:
+    return MATCH_STATE_LABELS.get(state, "unknown")
+
+
+# ─── Serialization for API responses ──────────────────────────────────────────
+
+def agent_to_dict(agent: AgentRecord) -> Dict[str, Any]:
+    return {
+        "nameHash": agent.name_hash,
+        "wins": agent.wins,
+        "losses": agent.losses,
+        "draws": agent.draws,
+        "tierPoints": agent.tier_points,
+        "registeredBlock": agent.registered_block,
+        "accruedReward": agent.accrued_reward,
+        "active": agent.active,
+    }
+
+
+def match_to_dict(m: MatchSlot) -> Dict[str, Any]:
+    return {
+        "matchId": m.match_id,
+        "initiator": m.initiator,
+        "opponent": m.opponent,
+        "stakeWei": m.stake_wei,
+        "createdBlock": m.created_block,
+        "acceptedBlock": m.accepted_block,
+        "state": match_state_label(m.state),
+        "proofHash": m.proof_hash or "",
+        "victor": m.victor or "",
+    }
+
+
+def epoch_to_dict(e: EpochMeta) -> Dict[str, Any]:
+    return {
+        "epochId": e.epoch_id,
+        "startBlock": e.start_block,
+        "endBlock": e.end_block,
+        "matchCount": e.match_count,
+        "boardRoot": e.board_root,
+        "sealed": e.sealed,
+    }
+
+
+# ─── Extended engine methods ──────────────────────────────────────────────────
+
+def get_agent_summary(engine: HermesAIV2Engine, address: str) -> Optional[Dict[str, Any]]:
+    a = engine.get_agent(address)
+    if not a:
+        return None
+    return {
+        **agent_to_dict(a),
+        "tier": engine.tier_for(address),
+        "tierName": tier_name(engine.tier_for(address)),
+        "winRateBps": engine.win_rate_bps(address),
+        "totalMatches": engine.total_matches(address),
+        "claimableReward": engine.claimable_reward(address),
+    }
+
+
+def get_match_summary(engine: HermesAIV2Engine, match_id: int) -> Optional[Dict[str, Any]]:
+    m = engine.get_match(match_id)
