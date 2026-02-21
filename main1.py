@@ -791,3 +791,64 @@ def validate_create_match_params(initiator: str, opponent: str, stake_wei: int, 
         errors.append("Pending match limit reached")
     return errors
 
+
+# ─── Snapshot and diff (for debugging / audit) ────────────────────────────────
+
+def snapshot_agents(engine: HermesAIV2Engine) -> Dict[str, Dict[str, Any]]:
+    """Return full snapshot of all agents as dict."""
+    return {addr: agent_to_dict(a) for addr, a in engine._agents.items()}
+
+
+def snapshot_matches(engine: HermesAIV2Engine) -> Dict[int, Dict[str, Any]]:
+    """Return full snapshot of all matches as dict."""
+    return {mid: match_to_dict(m) for mid, m in engine._matches.items()}
+
+
+# ─── Wei / Ether conversion ──────────────────────────────────────────────────
+
+def wei_to_ether(wei: int) -> float:
+    return wei / 10**18
+
+
+def ether_to_wei(ether: float) -> int:
+    return int(ether * 10**18)
+
+
+# ─── Block time estimates (12s per block assumption) ──────────────────────────
+
+SECONDS_PER_BLOCK = 12
+
+
+def blocks_to_seconds(blocks: int) -> int:
+    return blocks * SECONDS_PER_BLOCK
+
+
+def blocks_to_days(blocks: int) -> float:
+    return blocks * SECONDS_PER_BLOCK / 86400
+
+
+def epoch_duration_days() -> float:
+    return blocks_to_days(EPOCH_BLOCKS)
+
+
+def match_timeout_seconds() -> int:
+    return blocks_to_seconds(MATCH_TIMEOUT_BLOCKS)
+
+
+# ─── Event log parsers (simulated) ────────────────────────────────────────────
+
+def parse_agent_registered(log: Dict[str, Any]) -> Optional[Tuple[str, str, int]]:
+    """Return (agent, nameHash, block) if valid."""
+    if log.get("event") != "AgentRegistered":
+        return None
+    a = log.get("agent")
+    nh = log.get("nameHash")
+    b = log.get("block")
+    if a and nh is not None and b is not None:
+        return (a, nh, int(b))
+    return None
+
+
+def parse_match_created(log: Dict[str, Any]) -> Optional[Tuple[int, str, str, int, int]]:
+    """Return (matchId, initiator, opponent, stake, block) if valid."""
+    if log.get("event") != "MatchCreated":
