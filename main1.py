@@ -730,3 +730,64 @@ SELECTORS = {
     "acceptMatch": function_selector("acceptMatch(uint256)"),
     "settleMatch": function_selector("settleMatch(uint256,address,bytes32)"),
     "claimReward": function_selector("claimReward()"),
+    "cancelMatch": function_selector("cancelMatch(uint256)"),
+    "claimTimeout": function_selector("claimTimeout(uint256)"),
+    "startNextEpoch": function_selector("startNextEpoch()"),
+    "sealEpoch": function_selector("sealEpoch(uint256,bytes32)"),
+    "recordEpochBoard": function_selector("recordEpochBoard(uint256,address[])"),
+    "setFrozen": function_selector("setFrozen(bool)"),
+}
+
+
+# ─── Pagination helpers ──────────────────────────────────────────────────────
+
+def paginate(items: List[Any], page: int, per_page: int) -> Tuple[List[Any], int]:
+    """Return (slice of items for page, total_pages)."""
+    total = len(items)
+    total_pages = max(1, (total + per_page - 1) // per_page)
+    start = (page - 1) * per_page
+    end = start + per_page
+    return items[start:end], total_pages
+
+
+# ─── Leaderboard with rank ────────────────────────────────────────────────────
+
+def leaderboard_with_rank(engine: HermesAIV2Engine, epoch_id: int, max_size: int = 100) -> List[Dict[str, Any]]:
+    """Return leaderboard entries with 1-based rank."""
+    raw = engine.build_leaderboard(epoch_id, max_size)
+    return [
+        {"rank": i + 1, "address": addr, "tierPoints": tp, "wins": w, "losses": l, "tier": engine.tier_for(addr)}
+        for i, (addr, tp, w, l) in enumerate(raw)
+    ]
+
+
+# ─── Config validation ───────────────────────────────────────────────────────
+
+def validate_register_params(address: str, name: str, value_wei: int) -> List[str]:
+    errors = []
+    if not is_valid_eth_address(address):
+        errors.append("Invalid agent address")
+    if not name or len(name) > 64:
+        errors.append("Invalid name length")
+    if value_wei < REGISTER_FEE_WEI:
+        errors.append("Insufficient registration fee")
+    return errors
+
+
+def validate_create_match_params(initiator: str, opponent: str, stake_wei: int, engine: HermesAIV2Engine) -> List[str]:
+    errors = []
+    if not is_valid_eth_address(initiator) or not is_valid_eth_address(opponent):
+        errors.append("Invalid address")
+    if initiator == opponent:
+        errors.append("Cannot match self")
+    if stake_wei < FLOOR_STAKE_WEI:
+        errors.append("Stake below minimum")
+    if initiator not in engine._agents:
+        errors.append("Initiator not registered")
+    if opponent not in engine._agents:
+        errors.append("Opponent not registered")
+    pending = len([m for m in engine._matches_by_initiator.get(initiator, []) if engine._matches[m].state == MatchState.OPEN])
+    if pending >= MAX_PENDING:
+        errors.append("Pending match limit reached")
+    return errors
+
