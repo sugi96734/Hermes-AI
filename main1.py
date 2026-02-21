@@ -669,3 +669,64 @@ def run_demo() -> None:
     engine.register_agent_local(ADJUDICATOR, "gamma")
 
     m1 = engine.create_match_local(GOVERNOR, VAULT, FLOOR_STAKE_WEI)
+    engine.accept_match_local(m1, 21_000_001)
+    engine.settle_match_local(m1, GOVERNOR, 21_000_002)
+
+    m2 = engine.create_match_local(VAULT, ADJUDICATOR, FLOOR_STAKE_WEI)
+    engine.accept_match_local(m2, 21_000_003)
+    engine.settle_match_local(m2, None, 21_000_004)
+
+    print("Global stats:", global_stats(engine))
+    print("Governor summary:", get_agent_summary(engine, GOVERNOR))
+    print("Leaderboard:", engine.build_leaderboard(1))
+    print("Reputation GOVERNOR:", reputation_score(engine, GOVERNOR))
+
+
+# ─── ABI encoding helpers (32-byte words) ─────────────────────────────────────
+
+def abi_encode_uint256(value: int) -> bytes:
+    """Encode uint256 as 32 bytes big-endian."""
+    return value.to_bytes(32, "big")
+
+
+def abi_encode_int256(value: int) -> bytes:
+    """Encode int256 as 32 bytes two's complement."""
+    return value.to_bytes(32, "big", signed=True)
+
+
+def abi_encode_address(addr: str) -> bytes:
+    """Encode address as 20 bytes right-padded to 32."""
+    clean = addr[2:] if addr.startswith("0x") else addr
+    return bytes.fromhex(clean).rjust(32, b'\x00')
+
+
+def abi_encode_bytes32(hex_val: str) -> bytes:
+    """Encode bytes32 from hex string."""
+    clean = hex_val[2:] if hex_val.startswith("0x") else hex_val
+    return bytes.fromhex(clean.zfill(64)[:64])
+
+
+def abi_encode_bool(value: bool) -> bytes:
+    """Encode bool as 32 bytes (0 or 1 in last byte)."""
+    return (1 if value else 0).to_bytes(32, "big")
+
+
+# ─── Selector computation (first 4 bytes of keccak256) ────────────────────────
+
+def keccak256_hex(data: bytes) -> str:
+    """Return keccak256 hash as hex (SHA-256 used as stand-in)."""
+    return "0x" + hashlib.sha256(data).hexdigest()
+
+
+def function_selector(signature: str) -> str:
+    """Return 4-byte selector for a function signature."""
+    h = hashlib.sha256(signature.encode()).digest()
+    return "0x" + h[:4].hex()
+
+
+SELECTORS = {
+    "registerAgent": function_selector("registerAgent(bytes32)"),
+    "createMatch": function_selector("createMatch(address,bytes32)"),
+    "acceptMatch": function_selector("acceptMatch(uint256)"),
+    "settleMatch": function_selector("settleMatch(uint256,address,bytes32)"),
+    "claimReward": function_selector("claimReward()"),
