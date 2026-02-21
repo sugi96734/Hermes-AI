@@ -1096,3 +1096,52 @@ def can_cancel(m: MatchSlot, sender: str) -> bool:
     return m.state == MatchState.OPEN and sender == m.initiator
 
 
+def can_accept(m: MatchSlot, sender: str) -> bool:
+    return m.state == MatchState.OPEN and sender == m.opponent
+
+
+def can_settle(m: MatchSlot, current_block: int) -> bool:
+    return m.state == MatchState.ACTIVE
+
+
+def can_claim_timeout(m: MatchSlot, current_block: int) -> bool:
+    return m.state == MatchState.ACTIVE and current_block >= m.accepted_block + MATCH_TIMEOUT_BLOCKS
+
+
+# ─── Summary stats for dashboard ──────────────────────────────────────────────
+
+def dashboard_stats(engine: HermesAIV2Engine) -> Dict[str, Any]:
+    g = global_stats(engine)
+    g["version"] = VERSION
+    g["epochDurationDays"] = round(epoch_duration_days(), 2)
+    g["matchTimeoutHours"] = round(match_timeout_seconds() / 3600, 2)
+    return g
+
+
+# ─── Contract address constants (for multi-chain) ─────────────────────────────
+
+CHAIN_IDS = {"mainnet": 1, "sepolia": 11155111, "goerli": 5}
+
+
+def get_chain_name(chain_id: int) -> str:
+    for name, cid in CHAIN_IDS.items():
+        if cid == chain_id:
+            return name
+    return "unknown"
+
+
+# ─── Docstrings for public API ───────────────────────────────────────────────
+
+HermesAIV2Engine.__doc__ = (
+    "Hermes-AI V2 off-chain engine. Maintains agent registry, match ledger, "
+    "and epoch/leaderboard state aligned with HermesAIV2.sol."
+)
+
+# ─── Final entry ─────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    main()
+    print("--- Demo ---")
+    run_demo()
+    assert_contract_constants()
+    print("Constants OK")
