@@ -852,3 +852,64 @@ def parse_agent_registered(log: Dict[str, Any]) -> Optional[Tuple[str, str, int]
 def parse_match_created(log: Dict[str, Any]) -> Optional[Tuple[int, str, str, int, int]]:
     """Return (matchId, initiator, opponent, stake, block) if valid."""
     if log.get("event") != "MatchCreated":
+        return None
+    mid = log.get("matchId")
+    init = log.get("initiator")
+    opp = log.get("opponent")
+    stake = log.get("stake")
+    b = log.get("block")
+    if mid is not None and init and opp and stake is not None and b is not None:
+        return (int(mid), init, opp, int(stake), int(b))
+    return None
+
+
+# ─── Health check (engine invariants) ──────────────────────────────────────────
+
+def check_invariants(engine: HermesAIV2Engine) -> List[str]:
+    """Check basic invariants; return list of violation messages."""
+    issues = []
+    total_stake = sum(
+        m.stake_wei * (2 if m.state == MatchState.ACTIVE else 1)
+        for m in engine._matches.values()
+        if m.state in (MatchState.OPEN, MatchState.ACTIVE)
+    )
+    if total_stake != engine._total_stake_held:
+        issues.append("total_stake_held mismatch")
+    if engine._total_agents != len(engine._agents):
+        issues.append("total_agents count mismatch")
+    return issues
+
+
+# ─── Default addresses (for tests / scripts) ──────────────────────────────────
+
+DEFAULT_GENESIS = 21_000_000
+
+
+def create_engine_with_fixtures(genesis: int = DEFAULT_GENESIS) -> HermesAIV2Engine:
+    """Create engine and register governor, vault, adjudicator."""
+    e = HermesAIV2Engine(genesis)
+    e.register_agent_local(GOVERNOR, "governor")
+    e.register_agent_local(VAULT, "vault")
+    e.register_agent_local(ADJUDICATOR, "adjudicator")
+    return e
+
+
+# ─── JSON export/import stubs ─────────────────────────────────────────────────
+
+def engine_state_to_json(engine: HermesAIV2Engine) -> str:
+    """Export engine state as JSON string (agents + matches + epochs)."""
+    data = {
+        "version": VERSION,
+        "genesis_block": engine.genesis_block,
+        "next_match_id": engine._next_match_id,
+        "current_epoch_id": engine._current_epoch_id,
+        "total_stake_held": engine._total_stake_held,
+        "total_fees": engine._total_fees,
+        "total_agents": engine._total_agents,
+        "agents": {addr: agent_to_dict(a) for addr, a in engine._agents.items()},
+        "matches": {str(mid): match_to_dict(m) for mid, m in engine._matches.items()},
+        "epochs": {str(eid): epoch_to_dict(e) for eid, e in engine._epochs.items()},
+    }
+    return json.dumps(data, indent=2)
+
+
