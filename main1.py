@@ -547,3 +547,64 @@ def get_agent_summary(engine: HermesAIV2Engine, address: str) -> Optional[Dict[s
 
 def get_match_summary(engine: HermesAIV2Engine, match_id: int) -> Optional[Dict[str, Any]]:
     m = engine.get_match(match_id)
+    if not m:
+        return None
+    return match_to_dict(m)
+
+
+# ─── Simulated RPC / contract call builders ───────────────────────────────────
+
+def build_register_agent_calldata(name_hash_hex: str) -> str:
+    if not name_hash_hex.startswith("0x"):
+        name_hash_hex = "0x" + name_hash_hex
+    return "0x" + name_hash_hex[2:].zfill(64)
+
+
+def build_create_match_calldata(opponent: str, nonce_hash: str) -> Dict[str, str]:
+    return {"opponent": opponent, "nonceHash": nonce_hash}
+
+
+def build_accept_match_calldata(match_id: int) -> Dict[str, Any]:
+    return {"matchId": match_id}
+
+
+def build_settle_match_calldata(match_id: int, victor: str, proof_hash: str) -> Dict[str, Any]:
+    return {"matchId": match_id, "victor": victor, "proofHash": proof_hash}
+
+
+# ─── Bulk load and export ─────────────────────────────────────────────────────
+
+def export_agents_csv(engine: HermesAIV2Engine) -> str:
+    lines = ["address,nameHash,wins,losses,draws,tierPoints,accruedReward,active"]
+    for addr, a in engine._agents.items():
+        lines.append(f"{addr},{a.name_hash},{a.wins},{a.losses},{a.draws},{a.tier_points},{a.accrued_reward},{a.active}")
+    return "\n".join(lines)
+
+
+def export_matches_csv(engine: HermesAIV2Engine) -> str:
+    lines = ["matchId,initiator,opponent,stakeWei,state,victor"]
+    for mid, m in sorted(engine._matches.items()):
+        lines.append(f"{mid},{m.initiator},{m.opponent},{m.stake_wei},{match_state_label(m.state)},{m.victor or ''}")
+    return "\n".join(lines)
+
+
+# ─── Stats aggregator ────────────────────────────────────────────────────────
+
+def global_stats(engine: HermesAIV2Engine) -> Dict[str, Any]:
+    open_count = sum(1 for m in engine._matches.values() if m.state == MatchState.OPEN)
+    active_count = sum(1 for m in engine._matches.values() if m.state == MatchState.ACTIVE)
+    settled_count = sum(1 for m in engine._matches.values() if m.state == MatchState.SETTLED)
+    return {
+        "totalAgents": engine._total_agents,
+        "totalMatches": len(engine._matches),
+        "openMatches": open_count,
+        "activeMatches": active_count,
+        "settledMatches": settled_count,
+        "totalStakeHeld": engine._total_stake_held,
+        "totalFees": engine._total_fees,
+        "currentEpochId": engine._current_epoch_id,
+    }
+
+
+# ─── Reputation score (off-chain metric) ──────────────────────────────────────
+
