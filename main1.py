@@ -364,3 +364,64 @@ def get_settled_match_ids(engine: HermesAIV2Engine, offset: int, limit: int) -> 
     out = [mid for mid, m in engine._matches.items() if m.state == MatchState.SETTLED]
     return out[offset : offset + limit]
 
+
+# ─── Config and constants export ─────────────────────────────────────────────
+
+CONFIG = {
+    "SCALE": SCALE,
+    "FEE_BASIS": FEE_BASIS,
+    "FEE_DENOM": FEE_DENOM,
+    "MAX_PENDING": MAX_PENDING,
+    "MATCH_TIMEOUT_BLOCKS": MATCH_TIMEOUT_BLOCKS,
+    "EPOCH_BLOCKS": EPOCH_BLOCKS,
+    "FLOOR_STAKE_WEI": FLOOR_STAKE_WEI,
+    "REGISTER_FEE_WEI": REGISTER_FEE_WEI,
+    "VERSION": VERSION,
+    "GOVERNOR": GOVERNOR,
+    "VAULT": VAULT,
+    "ADJUDICATOR": ADJUDICATOR,
+    "BOUNTY_POOL": BOUNTY_POOL,
+    "RELAYER": RELAYER,
+}
+
+
+def get_config() -> Dict[str, Any]:
+    return dict(CONFIG)
+
+
+# ─── Event payload builders (for off-chain indexing) ──────────────────────────
+
+def build_agent_registered_payload(address: str, name_hash: str, block: int) -> Dict[str, Any]:
+    return {"event": "AgentRegistered", "agent": address, "nameHash": name_hash, "block": block}
+
+
+def build_match_created_payload(match_id: int, initiator: str, opponent: str, stake: int, block: int) -> Dict[str, Any]:
+    return {
+        "event": "MatchCreated",
+        "matchId": match_id,
+        "initiator": initiator,
+        "opponent": opponent,
+        "stake": stake,
+        "block": block,
+    }
+
+
+def build_match_settled_payload(match_id: int, victor: Optional[str], proof_hash: str, block: int) -> Dict[str, Any]:
+    return {"event": "MatchSettled", "matchId": match_id, "victor": victor or "", "proofHash": proof_hash, "block": block}
+
+
+# ─── Validation helpers ──────────────────────────────────────────────────────
+
+def is_valid_eth_address(s: str) -> bool:
+    if not s or len(s) < 42:
+        return False
+    clean = s[2:] if s.startswith("0x") else s
+    return len(clean) == 40 and all(c in "0123456789abcdefABCDEF" for c in clean)
+
+
+def is_valid_bytes32_hex(s: str) -> bool:
+    if not s:
+        return False
+    clean = s[2:] if s.startswith("0x") else s
+    return len(clean) <= 64 and all(c in "0123456789abcdefABCDEF" for c in clean)
+
