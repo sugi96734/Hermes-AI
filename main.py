@@ -103,3 +103,38 @@ class HermesAIV2Engine:
         return "0x" + h.zfill(64)
 
     def register_agent_local(self, address: str, name: str) -> None:
+        if address in self._agents:
+            raise ValueError("HermesAIV2_AgentExists")
+        nh = self.name_hash(name)
+        self._agents[address] = AgentRecord(
+            name_hash=nh,
+            wins=0,
+            losses=0,
+            draws=0,
+            tier_points=0,
+            registered_block=self.genesis_block,
+            accrued_reward=0,
+            active=True,
+        )
+        self._total_agents += 1
+        self._matches_by_initiator[address] = []
+        self._matches_by_opponent[address] = []
+
+    def create_match_local(self, initiator: str, opponent: str, stake_wei: int) -> int:
+        if initiator not in self._agents or opponent not in self._agents:
+            raise ValueError("HermesAIV2_AgentMissing")
+        if initiator == opponent:
+            raise ValueError("HermesAIV2_SelfMatch")
+        if stake_wei < FLOOR_STAKE_WEI:
+            raise ValueError("HermesAIV2_StakeTooLow")
+        pending = len([m for m in self._matches_by_initiator.get(initiator, []) if self._matches[m].state == MatchState.OPEN])
+        if pending >= MAX_PENDING:
+            raise ValueError("HermesAIV2_PendingLimit")
+
+        match_id = self._next_match_id
+        self._next_match_id += 1
+        self._matches[match_id] = MatchSlot(
+            match_id=match_id,
+            initiator=initiator,
+            opponent=opponent,
+            stake_wei=stake_wei,
