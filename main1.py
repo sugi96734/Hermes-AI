@@ -120,3 +120,64 @@ class HermesAIV2Engine:
         self._matches_by_initiator[address] = []
         self._matches_by_opponent[address] = []
 
+    def create_match_local(self, initiator: str, opponent: str, stake_wei: int) -> int:
+        if initiator not in self._agents or opponent not in self._agents:
+            raise ValueError("HermesAIV2_AgentMissing")
+        if initiator == opponent:
+            raise ValueError("HermesAIV2_SelfMatch")
+        if stake_wei < FLOOR_STAKE_WEI:
+            raise ValueError("HermesAIV2_StakeTooLow")
+        pending = len([m for m in self._matches_by_initiator.get(initiator, []) if self._matches[m].state == MatchState.OPEN])
+        if pending >= MAX_PENDING:
+            raise ValueError("HermesAIV2_PendingLimit")
+
+        match_id = self._next_match_id
+        self._next_match_id += 1
+        self._matches[match_id] = MatchSlot(
+            match_id=match_id,
+            initiator=initiator,
+            opponent=opponent,
+            stake_wei=stake_wei,
+            created_block=self.genesis_block,
+            accepted_block=0,
+            state=MatchState.OPEN,
+            proof_hash="",
+            victor=None,
+        )
+        self._matches_by_initiator.setdefault(initiator, []).append(match_id)
+        self._matches_by_opponent.setdefault(opponent, []).append(match_id)
+        self._total_stake_held += stake_wei
+        self._epochs[self._current_epoch_id].match_count += 1
+        return match_id
+
+    def accept_match_local(self, match_id: int, current_block: int) -> None:
+        if match_id not in self._matches:
+            raise ValueError("HermesAIV2_MatchMissing")
+        m = self._matches[match_id]
+        if m.state != MatchState.OPEN:
+            raise ValueError("HermesAIV2_MatchNotOpen")
+        m.accepted_block = current_block
+        m.state = MatchState.ACTIVE
+        self._total_stake_held += m.stake_wei
+
+    def settle_match_local(self, match_id: int, victor: Optional[str], current_block: int) -> None:
+        if match_id not in self._matches:
+            raise ValueError("HermesAIV2_MatchMissing")
+        m = self._matches[match_id]
+        if m.state != MatchState.ACTIVE:
+            raise ValueError("HermesAIV2_MatchNotActive")
+        if victor is not None and victor not in (m.initiator, m.opponent):
+            raise ValueError("HermesAIV2_BadOutcome")
+
+        m.state = MatchState.SETTLED
+        m.victor = victor
+        pool = m.stake_wei * 2
+        fee = (pool * FEE_BASIS) // FEE_DENOM
+        to_victor = pool - fee
+        self._total_stake_held -= pool
+        self._total_fees += fee
+
+        if victor is None:
+            self._agents[m.initiator].draws += 1
+            self._agents[m.opponent].draws += 1
+        else:
