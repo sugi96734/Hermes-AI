@@ -181,3 +181,64 @@ class HermesAIV2Engine:
             self._agents[m.initiator].draws += 1
             self._agents[m.opponent].draws += 1
         else:
+            self._agents[victor].wins += 1
+            self._agents[victor].tier_points += 12
+            self._agents[victor].accrued_reward += fee // 2
+            loser = m.opponent if victor == m.initiator else m.initiator
+            self._agents[loser].losses += 1
+            if self._agents[loser].tier_points >= 6:
+                self._agents[loser].tier_points -= 6
+
+    def get_agent(self, address: str) -> Optional[AgentRecord]:
+        return self._agents.get(address)
+
+    def get_match(self, match_id: int) -> Optional[MatchSlot]:
+        return self._matches.get(match_id)
+
+    def get_epoch(self, epoch_id: int) -> Optional[EpochMeta]:
+        return self._epochs.get(epoch_id)
+
+    def tier_for(self, address: str) -> int:
+        a = self._agents.get(address)
+        if not a:
+            return 0
+        tp = a.tier_points
+        if tp >= 600:
+            return 5
+        if tp >= 240:
+            return 4
+        if tp >= 96:
+            return 3
+        if tp >= 24:
+            return 2
+        if tp >= 1:
+            return 1
+        return 0
+
+    def claimable_reward(self, address: str) -> int:
+        return self._agents.get(address, AgentRecord("", 0, 0, 0, 0, 0, 0, False)).accrued_reward
+
+    def win_rate_bps(self, address: str) -> int:
+        a = self._agents.get(address)
+        if not a:
+            return 0
+        total = a.wins + a.losses + a.draws
+        if total == 0:
+            return 0
+        return (a.wins * 10_000) // total
+
+    def total_matches(self, address: str) -> int:
+        a = self._agents.get(address)
+        if not a:
+            return 0
+        return a.wins + a.losses + a.draws
+
+    def build_leaderboard(self, epoch_id: int, max_size: int = 100) -> List[Tuple[str, int, int, int]]:
+        out: List[Tuple[str, int, int, int]] = []
+        for addr, a in self._agents.items():
+            if not a.active:
+                continue
+            out.append((addr, a.tier_points, a.wins, a.losses))
+        out.sort(key=lambda x: (-x[1], -x[2], x[3]))
+        return out[:max_size]
+
