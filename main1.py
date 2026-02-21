@@ -608,3 +608,64 @@ def global_stats(engine: HermesAIV2Engine) -> Dict[str, Any]:
 
 # ─── Reputation score (off-chain metric) ──────────────────────────────────────
 
+def reputation_score(engine: HermesAIV2Engine, address: str) -> float:
+    a = engine.get_agent(address)
+    if not a:
+        return 0.0
+    total = a.wins + a.losses + a.draws
+    if total == 0:
+        return 0.0
+    return (a.wins * 2.0 + a.draws) / (total * 2.0)
+
+
+# ─── Timeout check ───────────────────────────────────────────────────────────
+
+def is_match_timed_out(m: MatchSlot, current_block: int) -> bool:
+    return m.state == MatchState.ACTIVE and current_block >= m.accepted_block + MATCH_TIMEOUT_BLOCKS
+
+
+def blocks_until_timeout(m: MatchSlot, current_block: int) -> int:
+    if m.state != MatchState.ACTIVE:
+        return 0
+    deadline = m.accepted_block + MATCH_TIMEOUT_BLOCKS
+    if current_block >= deadline:
+        return 0
+    return deadline - current_block
+
+
+# ─── Additional engine: replay from events ─────────────────────────────────────
+
+class HermesAIV2Replay:
+    """Replay engine state from a list of event-like dicts."""
+
+    def __init__(self, genesis_block: int = 0):
+        self.engine = HermesAIV2Engine(genesis_block)
+        self._block = genesis_block
+
+    def advance_block(self, n: int = 1) -> None:
+        self._block += n
+
+    def apply_register(self, address: str, name: str) -> None:
+        self.engine.register_agent_local(address, name)
+
+    def apply_create_match(self, initiator: str, opponent: str, stake_wei: int) -> int:
+        return self.engine.create_match_local(initiator, opponent, stake_wei)
+
+    def apply_accept_match(self, match_id: int) -> None:
+        self.engine.accept_match_local(match_id, self._block)
+        self.advance_block()
+
+    def apply_settle_match(self, match_id: int, victor: Optional[str]) -> None:
+        self.engine.settle_match_local(match_id, victor, self._block)
+        self.advance_block()
+
+
+# ─── Main extended ───────────────────────────────────────────────────────────
+
+def run_demo() -> None:
+    engine = HermesAIV2Engine(genesis_block=21_000_000)
+    engine.register_agent_local(GOVERNOR, "alpha")
+    engine.register_agent_local(VAULT, "beta")
+    engine.register_agent_local(ADJUDICATOR, "gamma")
+
+    m1 = engine.create_match_local(GOVERNOR, VAULT, FLOOR_STAKE_WEI)
