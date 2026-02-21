@@ -425,3 +425,64 @@ def is_valid_bytes32_hex(s: str) -> bool:
     clean = s[2:] if s.startswith("0x") else s
     return len(clean) <= 64 and all(c in "0123456789abcdefABCDEF" for c in clean)
 
+
+# ─── Tier thresholds (match contract logic) ───────────────────────────────────
+
+TIER_THRESHOLDS = [0, 1, 24, 96, 240, 600]
+
+
+def tier_from_points(points: int) -> int:
+    for i in range(len(TIER_THRESHOLDS) - 1, -1, -1):
+        if points >= TIER_THRESHOLDS[i]:
+            return i
+    return 0
+
+
+def min_points_for_tier(tier: int) -> int:
+    if 0 <= tier < len(TIER_THRESHOLDS):
+        return TIER_THRESHOLDS[tier]
+    return 0
+
+
+# ─── Fee and reward calculations ─────────────────────────────────────────────
+
+def fee_from_pool(pool_wei: int) -> int:
+    return (pool_wei * FEE_BASIS) // FEE_DENOM
+
+
+def to_victor_amount(pool_wei: int) -> int:
+    return pool_wei - fee_from_pool(pool_wei)
+
+
+def accrued_reward_share(fee_wei: int) -> int:
+    return fee_wei // 2
+
+
+# ─── Epoch helpers ───────────────────────────────────────────────────────────
+
+def epoch_end_block(epoch_id: int, genesis: int) -> int:
+    return genesis + epoch_id * EPOCH_BLOCKS
+
+
+def epoch_start_block(epoch_id: int, genesis: int) -> int:
+    return genesis + (epoch_id - 1) * EPOCH_BLOCKS
+
+
+def current_epoch_at_block(block: int, genesis: int) -> int:
+    if block < genesis:
+        return 0
+    return 1 + (block - genesis) // EPOCH_BLOCKS
+
+
+# ─── Match state labels ───────────────────────────────────────────────────────
+
+MATCH_STATE_LABELS = {
+    MatchState.OPEN: "open",
+    MatchState.ACTIVE: "active",
+    MatchState.SETTLED: "settled",
+    MatchState.CANCELLED: "cancelled",
+    MatchState.TIMED_OUT: "timed_out",
+}
+
+
+def match_state_label(state: MatchState) -> str:
