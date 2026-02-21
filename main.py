@@ -33,3 +33,38 @@ class MatchState(Enum):
     OPEN = 0
     ACTIVE = 1
     SETTLED = 2
+    CANCELLED = 3
+    TIMED_OUT = 4
+
+
+@dataclass
+class AgentRecord:
+    name_hash: str
+    wins: int
+    losses: int
+    draws: int
+    tier_points: int
+    registered_block: int
+    accrued_reward: int
+    active: bool
+
+
+@dataclass
+class MatchSlot:
+    match_id: int
+    initiator: str
+    opponent: str
+    stake_wei: int
+    created_block: int
+    accepted_block: int
+    state: MatchState
+    proof_hash: str
+    victor: Optional[str]
+
+
+@dataclass
+class EpochMeta:
+    epoch_id: int
+    start_block: int
+    end_block: int
+    match_count: int
